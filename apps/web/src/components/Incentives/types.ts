@@ -340,22 +340,45 @@ export const INCENTIVES_QUERY = `
   query incentives {
     incentives(subgraphError: deny) {
       id
-      ended
       reward
-      contract
+      reward {
+        id
+        symbol
+        decimals
+      }
+      pool {
+        id
+        feeTier
+        token0 {
+          id
+          symbol
+          name
+          decimals
+        }
+        token1 {
+          id
+          symbol
+          name
+          decimals
+          derivedETH
+        }
+        liquidity
+        totalValueLockedUSD
+        feesUSD
+        volumeUSD
+        poolDayData(first: 1, orderBy: date, orderDirection: desc) {
+          feesUSD
+          volumeUSD
+        }
+      }
       startTime
       endTime
       vestingPeriod
-      rewardToken {
-        id
-        decimals
-        symbol
-      }
-      pool{
-        id
-        feeTier
-      }
       refundee
+      ended
+    }
+    bundle(id: "1") {
+      ethPriceUSD
     }
   }
 `;
@@ -376,6 +399,7 @@ export const POOL_QUERY = `
         name
         id
         symbol
+        derivedETH
       }
       liquidity
       feeTier
