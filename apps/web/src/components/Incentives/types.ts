@@ -125,7 +125,7 @@ export function findTokenByAddress(
     return;
   }
   return tokens.find(
-    (token) => token.address.toLowerCase() === address.toLowerCase()
+    (token) => token?.address?.toLowerCase() === address?.toLowerCase()
   );
 }
 
@@ -348,9 +348,9 @@ query incentive($id: String!) {
 // }
 // `;
 
-export const INCENTIVES_QUERY = `
-  query incentives {
-    incentives(subgraphError: deny) {
+export const INCENTIVES_POOL_QUERY = `
+  query pool($id: String!) {
+    pool(subgraphError: deny, where: {id: $id}) {
       id
       reward
       rewardToken {

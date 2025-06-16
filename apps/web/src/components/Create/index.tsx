@@ -383,6 +383,7 @@ export default function Create() {
         const endedTime = Math.floor(
           new Date(`${endDate} ${endTime}`).getTime() / 1000
         );
+
         const reward = ethers.utils.parseUnits(
           formData.rewardsAmount,
           formData.tokenDecimals
@@ -396,33 +397,51 @@ export default function Create() {
           refundee: formData.refundeeAddress,
         };
 
-        if (v3StakerContract) {
-          setIsCreating(true);
-          const tx = await v3StakerContract.createIncentive(
-            incentiveKey,
-            reward
-          );
-          await tx.wait();
+        const createIncentiveDto = {
+          poolAddress: formData.poolAddress,
+          startTime: startedTime,
+          endTime: endedTime,
+          vestingPeriod: parseInt(formData.vestingPeriod),
+          totalRewardUnclaimed: parseFloat(formData.rewardsAmount),
+          rewardToken: formData.rewardTokenAddress,
+          refundeeAddress: formData.refundeeAddress,
+        };
+        console.log('createIncentiveDto', createIncentiveDto)
 
-          setIsCreating(false);
-          // Reset form data
-          setFormData({
-            rewardTokenAddress: "",
-            tokenSymbol: "",
-            tokenDecimals: 18,
-            rewardsAmount: "",
-            vestingPeriod: "",
-            poolAddress: "",
-            refundeeAddress: "",
-            approvalComplete: false,
-            tokenAllowance: ethers.BigNumber.from(0),
-          })
-          navigate({
-            pathname: "/farms",
-          });
-        } else {
-          alert("Contract is not available.");
+        setIsCreating(true);
+        const response = await fetch(`${process.env.REACT_APP_V3_STAKER_API_URL}/incentives`, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(createIncentiveDto),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const result = await response.json();
+        console.log('Incentive created successfully:', result);
+
+        setIsCreating(false);
+        // Reset form data
+        setFormData({
+          rewardTokenAddress: "",
+          tokenSymbol: "",
+          tokenDecimals: 18,
+          rewardsAmount: "",
+          vestingPeriod: "",
+          poolAddress: "",
+          refundeeAddress: "",
+          approvalComplete: false,
+          tokenAllowance: ethers.BigNumber.from(0),
+        })
+        navigate({
+          pathname: "/farms",
+        });
       } catch (error) {
         console.error(error);
         alert("Failed to create incentive: " + error.message);
