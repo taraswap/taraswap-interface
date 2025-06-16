@@ -3,7 +3,6 @@ import { useAccount } from "hooks/useAccount";
 import { formatUnits } from "viem/utils";
 import {
   findTokenByAddress,
-  INCENTIVES_POOL_QUERY,
 } from "components/Incentives/types";
 import { PositionsResponse } from "hooks/useTotalPositions";
 import { useTokenList } from "hooks/useTokenList";
@@ -180,7 +179,6 @@ export function useIncentivesData(poolAddress?: string) {
   const accountAddress = useMemo(() => account.address, [account.address]);
   const tokenAddresses = useMemo(() => {
     if (!incentivesData.length) return [];
-    console.log('incentivesData', incentivesData)
     return incentivesData.map(incentive => incentive.pool.token1.id);
   }, [incentivesData]);
 
@@ -382,7 +380,8 @@ export function useIncentivesData(poolAddress?: string) {
 
       // Transform REST API data to match the expected GraphQL structure
       const transformedIncentivesData = incentivesApiData.map((incentive: any) => {
-        const pool = poolAddress ? incentivesPoolData.pools.find((pool: any) => pool.id === poolAddress?.toLowerCase()) : incentivesPoolData.pools;
+        const poolAddressToFind = poolAddress ? poolAddress?.toLowerCase() : incentive.poolAddress;
+        const pool = incentivesPoolData.pools.find((pool: any) => pool.id === poolAddressToFind);
         return ({
           id: incentive.incentiveId,
           reward: incentive.totalRewardUnclaimed,
@@ -395,7 +394,6 @@ export function useIncentivesData(poolAddress?: string) {
           ended: Date.now() / 1000 > incentive.endTime,
         })
       });
-      console.log('transformedIncentivesData', transformedIncentivesData)
 
       if (!transformedIncentivesData?.length) {
         setActiveIncentives([]);
@@ -741,7 +739,6 @@ export function useIncentivesData(poolAddress?: string) {
               );
             })
           );
-          console.log('processedIncentives', processedIncentives)
 
           const sortedIncentives = processedIncentives.sort((a, b) => {
             if (a.status === "active" && b.status !== "active") return -1;
