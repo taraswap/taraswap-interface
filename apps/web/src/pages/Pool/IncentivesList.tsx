@@ -22,6 +22,7 @@ import styled from "styled-components";
 import { useBulkPosition } from "hooks/useBulkPosition";
 import Toggle from "components/Toggle";
 import { ethers } from "ethers";
+import { useAccount } from "hooks/useAccount";
 
 const Container = styled.div`
   height: 425px;
@@ -158,14 +159,9 @@ function IncentivesList({
   const [pendingRewardsMap, setPendingRewardsMap] = useState<
     Record<string, number>
   >({});
-  const [isTokenOwner, setIsTokenOwner] = useState(false);
-  const [isBulkStaking, setIsBulkStaking] = useState(false);
-  const [isBulkUnstaking, setIsBulkUnstaking] = useState(false);
-  const [isBulkWithdrawing, setIsBulkWithdrawing] = useState(false);
-  const [isStaking, setIsStaking] = useState(false);
-  const [isUnstaking, setIsUnstaking] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showEndedIncentives, setShowEndedIncentives] = useState(false);
+  const { address } = useAccount();
 
   const {
     activeIncentives,
@@ -179,155 +175,59 @@ function IncentivesList({
     : activeIncentives;
   const {
     getIncentivePendingRewards,
-  } = useBulkPosition(tokenId, poolAddress, allIncentives);
+    handleClaim,
+  } = useBulkPosition(tokenId);
 
-  const hasAvailableIncentives = useMemo(() => {
-    return activeIncentives.some(
-      (incentive) =>
-        incentive.positionOnPoolIds?.includes(tokenId) &&
-        !incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [activeIncentives]);
+  useEffect(() => {
+    const fetchRewards = async () => {
+      const rewards: Record<string, number> = {};
+      for (const incentive of allIncentives) {
+        try {
+          const reward = await getIncentivePendingRewards(incentive);
+          rewards[incentive.id] = Number(reward || 0);
+        } catch (error) {
+          console.error("Error fetching rewards:", error);
+          rewards[incentive.id] = 0;
+        }
+      }
 
-  const hasStakedIncentives = useMemo(() => {
-    return allIncentives.some((incentive) =>
-      incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [allIncentives]);
+      setPendingRewardsMap(rewards);
+    };
 
-  const hasAllIncetivesStaked = useMemo(() => {
-    return allIncentives.every((incentive) =>
-      incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [allIncentives]);
+    fetchRewards();
+  }, [allIncentives, getIncentivePendingRewards]);
 
-  // const handleStakeWithRefresh = useCallback(
-  //   async (incentive: ProcessedIncentive) => {
-  //     try {
-  //       setIsStaking(true);
-  //       const tx = await handleStake(incentive);
-  //       if (tx) {
-  //         await tx.wait(2);
-  //         await refetchIncentives();
-  //       }
-  //     } catch (error) {
-  //       console.error("Error in stake with refresh:", error);
-  //     } finally {
-  //       setIsStaking(false);
-  //     }
-  //   },
-  //   [handleStake, refetchIncentives]
-  // );
 
-  // const handleUnstakeWithRefresh = useCallback(
-  //   async (incentive: ProcessedIncentive) => {
-  //     try {
-  //       setIsUnstaking(true);
-  //       const tx = await handleUnstake(incentive);
-  //       if (tx) {
-  //         await tx.wait(2);
-  //         await refetchIncentives();
-  //       }
-  //     } catch (error) {
-  //       console.error("Error in unstake with refresh:", error);
-  //     } finally {
-  //       setIsUnstaking(false);
-  //     }
-  //   },
-  //   [handleUnstake, refetchIncentives]
-  // );
+  const handleClaimWithRefresh = useCallback(
+    async (pendingRewards: string, incentive: ProcessedIncentive) => {
+      try {
+        setIsClaiming(true);
 
-  // const handleClaimWithRefresh = useCallback(
-  //   async (incentive: ProcessedIncentive) => {
-  //     try {
-  //       setIsClaiming(true);
-  //       const tx = await handleClaim(incentive);
-  //       if (tx) {
-  //         await tx.wait(2);
-  //         await refetchIncentives();
-  //       }
-  //     } catch (error) {
-  //       console.error("Error in claim with refresh:", error);
-  //     } finally {
-  //       setIsClaiming(false);
-  //     }
-  //   },
-  //   [handleClaim, refetchIncentives]
-  // );
+        if (!address) {
+          throw new Error("No wallet connected");
+        }
 
-  // const handleBulkStakeWithRefresh = useCallback(async () => {
-  //   try {
-  //     setIsBulkStaking(true);
-  //     const tx = await handleBulkStake();
-  //     if (tx) {
-  //       await tx.wait(2);
-  //       await refetchIncentives();
-  //     }
-  //   } catch (error) {
-  //     console.error("Error in bulk staking with refresh:", error);
-  //   } finally {
-  //     setIsBulkStaking(false);
-  //   }
-  // }, [handleBulkStake, refetchIncentives]);
+        // Request user to sign a verification message
+        const message = `Verify wallet ownership for claiming ${pendingRewards} rewards at ${new Date().toISOString()}`;
+        const hexMessage = `0x${Buffer.from(message, 'utf8').toString('hex')}`;
 
-  // const handleBulkUnstakeWithRefresh = useCallback(async () => {
-  //   try {
-  //     setIsBulkUnstaking(true);
-  //     const tx = await handleBulkUnstake();
-  //     if (tx) {
-  //       await tx.wait(2);
-  //       await refetchIncentives();
-  //     }
-  //   } catch (error) {
-  //     console.error("Error in bulk unstaking with refresh:", error);
-  //   } finally {
-  //     setIsBulkUnstaking(false);
-  //   }
-  // }, [handleBulkUnstake, refetchIncentives]);
+        const signature = await (window.ethereum as any).request({
+          method: 'personal_sign',
+          params: [hexMessage, address],
+        });
 
-  // const handleBulkWithdrawWithRefresh = useCallback(async () => {
-  //   try {
-  //     setIsBulkWithdrawing(true);
-  //     const tx = await handleBulkWithdraw();
-  //     if (tx) {
-  //       await tx.wait(2);
-  //       await refetchIncentives();
-  //     }
-  //   } catch (error) {
-  //     console.error("Error in bulk withdrawal with refresh:", error);
-  //   } finally {
-  //     setIsBulkWithdrawing(false);
-  //   }
-  // }, [handleBulkWithdraw, refetchIncentives]);
+        console.log('Wallet verified with signature:', signature);
 
-  const positions = useMemo(
-    () =>
-      allIncentives.map((incentive) => ({
-        tokenId: Number(incentive.id),
-        incentive: incentive,
-      })),
-    [allIncentives]
+        await handleClaim(incentive);
+        await refetchIncentives();
+      } catch (error) {
+        console.error("Error in claim with refresh:", error);
+      } finally {
+        setIsClaiming(false);
+      }
+    },
+    [handleClaim, refetchIncentives, address]
   );
-
-  // useEffect(() => {
-  //   const fetchRewards = async () => {
-  //     const rewards: Record<string, number> = {};
-  //     for (const incentive of allIncentives) {
-  //       try {
-  //         const reward = await getIncentivePendingRewards(incentive);
-  //         rewards[incentive.id] = Number(ethers.utils.formatEther(reward || 0));
-  //       } catch (error) {
-  //         console.error("Error fetching rewards:", error);
-  //         rewards[incentive.id] = 0;
-  //       }
-  //     }
-  //     setPendingRewardsMap(rewards);
-  //   };
-
-  //   fetchRewards();
-  //   const interval = setInterval(fetchRewards, 10000);
-  //   return () => clearInterval(interval);
-  // }, [allIncentives, getIncentivePendingRewards]);
 
   if (isLoading) {
     return (
@@ -378,10 +278,6 @@ function IncentivesList({
           const hasStaked = incentive.positionOnIncentiveIds?.includes(
             Number(tokenId)
           );
-          const canStake =
-            incentive.positionOnPoolIds?.includes(Number(tokenId)) &&
-            !hasStaked;
-          console.log('incentive', incentive)
 
           const rewardToken = new Token(
             1,
@@ -389,13 +285,14 @@ function IncentivesList({
             incentive.rewardToken.decimals,
             incentive.rewardToken.symbol
           );
-          console.log('rewardToken', rewardToken)
 
           const logoURI = `https://cdn.jsdelivr.net/gh/taraswap/assets@main/logos/${getAddress(
             rewardToken.address
           )}/logo.png`;
 
           const pendingRewards = pendingRewardsMap[incentive.id] || 0;
+          console.log('pendingRewardsMap', pendingRewardsMap)
+          console.log('pendingRewards', pendingRewards)
           return (
             <IncentiveCard
               key={incentive.id}
@@ -446,84 +343,22 @@ function IncentivesList({
                         logoURI={logoURI}
                       />
                       <ThemedText.DeprecatedMain>
-                        {pendingRewards.toFixed(6) || "0"} &nbsp;
+                        {pendingRewards.toFixed(6)} &nbsp;
                         {rewardToken.symbol}
                       </ThemedText.DeprecatedMain>
                     </RowFixed>
                   </RowBetween>
-                  <RowBetween>
-                    <ThemedText.DeprecatedMain>
-                      <Trans i18nKey="common.accruedRewards" />
-                    </ThemedText.DeprecatedMain>
-                    <RowFixed>
-                      <StyledCurrencyLogo
-                        currency={rewardToken}
-                        size={20}
-                        style={{ marginRight: "8px" }}
-                        logoURI={logoURI}
-                      />
-                      <ThemedText.DeprecatedMain>
-                        {Number(incentive.currentReward?.reward || 0).toFixed(
-                          6
-                        ) || "0"}
-                        &nbsp;
-                        {rewardToken.symbol}
-                      </ThemedText.DeprecatedMain>
-                    </RowFixed>
-                  </RowBetween>
-                  {/* <Row>
+
+                  <Row style={{ justifyContent: 'center' }}>
                     <ButtonPrimary
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleStakeWithRefresh(incentive);
+                        handleClaimWithRefresh(pendingRewards.toFixed(6), incentive);
                       }}
                       disabled={
-                        !isActive || !canStake || isStaking || isBulkStaking
-                      }
-                      style={{
-                        padding: "8px",
-                        fontSize: "14px",
-                        height: "32px",
-                        width: "120px",
-                        marginRight: "8px",
-                        marginLeft: "12px",
-                      }}
-                    >
-                      {isStaking || isBulkStaking ? (
-                        <Trans i18nKey="common.staking" />
-                      ) : (
-                        <Trans i18nKey="common.stake" />
-                      )}
-                    </ButtonPrimary>
-                    <ButtonPrimary
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        handleUnstakeWithRefresh(incentive);
-                      }}
-                      disabled={!hasStaked || isUnstaking || isBulkUnstaking}
-                      style={{
-                        padding: "8px",
-                        fontSize: "14px",
-                        height: "32px",
-                        width: "120px",
-                        marginRight: "8px",
-                      }}
-                    >
-                      {isUnstaking || isBulkUnstaking ? (
-                        <Trans i18nKey="common.unstaking" />
-                      ) : (
-                        <Trans i18nKey="common.unstake" />
-                      )}
-                    </ButtonPrimary>
-                    <ButtonPrimary
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClaimWithRefresh(incentive);
-                      }}
-                      disabled={
-                        Number(incentive.currentReward?.reward) <= 0 ||
+                        Number(pendingRewards) <= 0 ||
                         isClaiming ||
-                        isNaN(Number(incentive.currentReward?.reward))
+                        isNaN(Number(pendingRewards))
                       }
                       style={{
                         padding: "8px",
@@ -538,7 +373,7 @@ function IncentivesList({
                         <Trans i18nKey="common.claim" />
                       )}
                     </ButtonPrimary>
-                  </Row> */}
+                  </Row>
                 </IncentiveContent>
               )}
             </IncentiveCard>

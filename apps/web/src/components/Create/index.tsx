@@ -424,7 +424,6 @@ export default function Create() {
         }
 
         const result = await response.json();
-        console.log('Incentive created successfully:', result);
 
         setIsCreating(false);
         // Reset form data

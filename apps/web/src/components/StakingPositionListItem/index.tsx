@@ -54,13 +54,13 @@ export default function StakingPositionListItem({ position }: { position: Positi
   const currency0 = useCurrency(getAddress(position.pool.token0?.id ?? ''))
   const currency1 = useCurrency(getAddress(position.pool.token1?.id ?? ''))
   const { formatDelta, formatTickPrice } = useFormatter()
-  const [pendingReward, setPendingReward] = useState<BigNumber>(BigNumber.from(0))
-  const { getIncentivePendingRewards } = useBulkPosition(position.id, position.pool.id, [])
+  const [pendingReward, setPendingReward] = useState<number>(0)
+  const { getIncentivePendingRewards } = useBulkPosition(position.id)
 
   useEffect(() => {
     const fetchRewards = async () => {
       const rewards = await getIncentivePendingRewards(position.incentive)
-      setPendingReward(rewards || BigNumber.from(0))
+      setPendingReward(Number(rewards || 0))
     }
     fetchRewards()
     const interval = setInterval(fetchRewards, 10000)
@@ -78,7 +78,7 @@ export default function StakingPositionListItem({ position }: { position: Positi
           <FeeTierText> {formatDelta(parseFloat(new Percent(position.pool.feeTier, 1_000_000).toSignificant()))}</FeeTierText>
         </PrimaryPositionIdData>
         <ThemedText.BodyPrimary>
-          <Trans i18nKey="common.pendingRewards" />: {Number(ethers.utils.formatEther(pendingReward)).toFixed(6)} &nbsp;
+          <Trans i18nKey="common.pendingRewards" />: {pendingReward.toFixed(6)} &nbsp;
           {position.incentive.rewardToken.symbol}
         </ThemedText.BodyPrimary>
       </RowBetween>
