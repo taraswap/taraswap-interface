@@ -70,7 +70,7 @@ type PositionListProps = React.PropsWithChildren<{
   isStakingList?: boolean
 }>
 
-function isStakingPosition(position: PositionDetails |  PositionWithIncentive): position is PositionWithIncentive {
+function isStakingPosition(position: PositionDetails | PositionWithIncentive): position is PositionWithIncentive {
   return 'id' in position && 'minter' in position && 'owner' in position && 'pool' in position
 }
 
@@ -114,19 +114,19 @@ export default function PositionList({
         )}
       </MobileHeader>
       {positions.map((p, i) => {
-        if (isStakingPosition(p)) {
-          return <StakingPositionListItem key={i} position={p} />
+        if (isStakingList) {
+          return <StakingPositionListItem key={i} position={p as any} />
         } else {
           return (
             <PositionListItem
-              key={p.tokenId.toString()}
-              token0={p.token0}
-              token1={p.token1}
-              tokenId={p.tokenId}
-              fee={p.fee}
-              liquidity={p.liquidity}
-              tickLower={p.tickLower}
-              tickUpper={p.tickUpper}
+              key={(p as PositionDetails).tokenId.toString()}
+              token0={(p as PositionDetails).token0}
+              token1={(p as PositionDetails).token1}
+              tokenId={(p as PositionDetails).tokenId}
+              fee={(p as PositionDetails).fee}
+              liquidity={(p as PositionDetails).liquidity}
+              tickLower={(p as PositionDetails).tickLower}
+              tickUpper={(p as PositionDetails).tickUpper}
             />
           )
         }

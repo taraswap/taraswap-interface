@@ -11,8 +11,11 @@ import { usePoolDatas } from "hooks/usePoolDatas";
 import { useTokenEthPrice } from "./useTokenUsdPrice";
 import { useMultipleTokenBalances } from "./useMultipleTokenBalances";
 import { useBulkPosition } from "./useBulkPosition";
-import { BigNumber, ethers } from "ethers";
+import { ethers } from "ethers";
 import { RewardInfo } from "./usePosition";
+import { Token } from "@taraswap/sdk-core";
+import { computePoolAddress } from "@taraswap/v3-sdk";
+import { PositionDetails } from "types/position";
 
 interface IncentiveData {
   id: string;
@@ -785,6 +788,42 @@ export function useIncentivesData(poolAddress?: string) {
     }
   }, [accountAddress, poolAddress, fetchData]);
 
+  const processPositionsWithIncentives = useCallback(async (positions: PositionDetails[]) => {
+    if (!positions || positions.length === 0) {
+      return [];
+    }
+
+    try {
+      const positionsWithIncentiveData = await Promise.all(
+        positions.map(async (position) => {
+          const poolAddress = computePoolAddress({
+            factoryAddress: "0x5EFAc029721023DD6859AFc8300d536a2d6d4c82",
+            tokenA: new Token(841, position.token0, 18),
+            tokenB: new Token(841, position.token1, 18),
+            fee: position.fee,
+            chainId: 841,
+          });
+
+          const incentiveData = await fetchIncentiveData(poolAddress);
+
+          if (incentiveData && incentiveData.length > 0) {
+            return incentiveData.map((incentive: any) => ({
+              ...position,
+              incentiveData: incentive
+            }));
+          }
+
+          return [];
+        })
+      );
+
+      return positionsWithIncentiveData.flat().filter((position): position is PositionDetails & { incentiveData: any } => position !== null && position !== undefined);
+    } catch (error) {
+      console.error('Error processing positions with incentives:', error);
+      return [];
+    }
+  }, [fetchIncentiveData]);
+
   return {
     activeIncentives,
     endedIncentives,
@@ -794,5 +833,6 @@ export function useIncentivesData(poolAddress?: string) {
     isLoading: isLoading || poolsLoading,
     error,
     refetch: fetchData,
+    processPositionsWithIncentives,
   };
 }

@@ -860,7 +860,7 @@
   "pool.showClosed": "Show closed positions",
   "pool.startingPrice": "Starting {{sym}} Price:",
   "pool.stakingPositions": "Staking positions",
-  "pool.stakingPositions.empty": "No staking positions yet",
+  "pool.stakingPositions.empty": "No incentives positions yet",
   "pool.supply": "Supply",
   "pool.supplyingMaths": "Supplying {{amtA}} {{symA}} and {{amtB}} {{symB}}",
   "pool.top": "Top pools",
