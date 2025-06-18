@@ -17,7 +17,7 @@ import { useNetworkSupportsV2 } from "hooks/useNetworkSupportsV2";
 import { useV3Positions } from "hooks/useV3Positions";
 import { Trans } from "i18n";
 import { PoolVersionMenu } from "pages/Pool/shared";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -37,6 +37,8 @@ import Trace from "uniswap/src/features/telemetry/Trace";
 import CTACards from "./CTACards";
 import { LoadingRows } from "./styled";
 import { useIncentivesData, UserPosition } from 'hooks/useIncentivesData'
+import { Token } from "@taraswap/sdk-core";
+import { computePoolAddress } from "@taraswap/v3-sdk";
 
 const PageWrapper = styled(AutoColumn)`
   padding: 68px 8px 0px;
@@ -218,10 +220,44 @@ export default function Pool() {
     account.address
   );
 
-  const { userPositionsInIncentives: stakingPositions = [], positionsToWithdraw = [], isLoading: isStakingPositionsLoading } = useIncentivesData();
-  const uniquePositions = [...new Map([...stakingPositions, ...positionsToWithdraw].map(position => 
-    [position.id, position]
-  )).values()];
+  const {
+    activeIncentives,
+    endedIncentives,
+    userPositionsInPools,
+    userPositionsInIncentives,
+    positionsToWithdraw,
+    isLoading: isIncentivesLoading,
+    error: incentivesError,
+    refetch,
+    processPositionsWithIncentives
+  } = useIncentivesData();
+
+  const [positionsWithIncentiveData, setPositionsWithIncentiveData] = useState<(PositionDetails & { incentiveData?: any })[]>([]);
+  const [isProcessingIncentives, setIsProcessingIncentives] = useState(false);
+  const [hasProcessedIncentives, setHasProcessedIncentives] = useState(false);
+
+  useEffect(() => {
+    const processData = async () => {
+      if (!positions || positions.length === 0) {
+        return;
+      }
+
+      setIsProcessingIncentives(true);
+      try {
+        const processed = await processPositionsWithIncentives(positions);
+        setPositionsWithIncentiveData(processed);
+        setHasProcessedIncentives(true);
+      } catch (error) {
+        console.error('Error processing positions:', error);
+        setPositionsWithIncentiveData([]);
+      } finally {
+        setIsProcessingIncentives(false);
+      }
+    };
+    if (!hasProcessedIncentives) {
+      processData();
+    }
+  }, [positions]);
 
   const [openPositions, closedPositions] = positions?.reduce<
     [PositionDetails[], PositionDetails[]]
@@ -387,11 +423,11 @@ export default function Pool() {
               </Row>
             </TitleRow>
             <MainContentWrapper>
-              {isStakingPositionsLoading ? (
+              {positionsLoading ? (
                 <PositionsLoadingPlaceholder />
-              ) : uniquePositions.length > 0 ? (
+              ) : positionsWithIncentiveData && positionsWithIncentiveData.length > 0 ? (
                 <PositionList
-                  positions={uniquePositions}
+                  positions={positionsWithIncentiveData as any}
                   isStakingList={true}
                 />
               ) : (

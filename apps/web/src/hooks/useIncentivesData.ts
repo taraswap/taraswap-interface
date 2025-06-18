@@ -3,7 +3,6 @@ import { useAccount } from "hooks/useAccount";
 import { formatUnits } from "viem/utils";
 import {
   findTokenByAddress,
-  INCENTIVES_QUERY,
 } from "components/Incentives/types";
 import { PositionsResponse } from "hooks/useTotalPositions";
 import { useTokenList } from "hooks/useTokenList";
@@ -12,8 +11,11 @@ import { usePoolDatas } from "hooks/usePoolDatas";
 import { useTokenEthPrice } from "./useTokenUsdPrice";
 import { useMultipleTokenBalances } from "./useMultipleTokenBalances";
 import { useBulkPosition } from "./useBulkPosition";
-import { BigNumber, ethers } from "ethers";
+import { ethers } from "ethers";
 import { RewardInfo } from "./usePosition";
+import { Token } from "@taraswap/sdk-core";
+import { computePoolAddress } from "@taraswap/v3-sdk";
+import { PositionDetails } from "types/position";
 
 interface IncentiveData {
   id: string;
@@ -196,20 +198,81 @@ export function useIncentivesData(poolAddress?: string) {
       }`;
   }, []);
 
-  const getIncentivesQuery = useCallback(() => {
-    const baseQuery = INCENTIVES_QUERY;
-    if (!poolAddress) return baseQuery;
-
-    return baseQuery.replace(
-      "incentives(",
-      `incentives(where: { pool: "${poolAddress.toLowerCase()}" },`
-    );
+  const getIncentivesQuery = useCallback((poolIds?: string[]) => {
+    if (poolAddress) {
+      // Query for a specific pool
+      return `
+        query pool {
+          pools(where: { id: "${poolAddress?.toLowerCase()}" }) {
+            id
+            feeTier
+            token0 {
+              id
+              symbol
+              name
+              decimals
+            }
+            token1 {
+              id
+              symbol
+              name
+              decimals
+              derivedETH
+            }
+            liquidity
+            totalValueLockedUSD
+            feesUSD
+            volumeUSD
+            poolDayData(first: 1, orderBy: date, orderDirection: desc) {
+              feesUSD
+              volumeUSD
+            }
+          }
+          bundle(id: "1") {
+            ethPriceUSD
+          }
+        }
+      `;
+    } else {
+      return `
+        query pools {
+          pools {
+            id
+            feeTier
+            token0 {
+              id
+              symbol
+              name
+              decimals
+            }
+            token1 {
+              id
+              symbol
+              name
+              decimals
+              derivedETH
+            }
+            liquidity
+            totalValueLockedUSD
+            feesUSD
+            volumeUSD
+            poolDayData(first: 1, orderBy: date, orderDirection: desc) {
+              feesUSD
+              volumeUSD
+            }
+          }
+          bundle(id: "1") {
+            ethPriceUSD
+          }
+        }
+      `;
+    }
   }, [poolAddress]);
 
   const getUserPositionsQuery = useCallback((userAddress: string) => {
     return `
       query {
-        positions(where: { owner: "${userAddress.toLowerCase()}", liquidity_gt: "0" }) {
+        positions(where: { owner: "${userAddress?.toLowerCase()}", liquidity_gt: "0" }) {
           id
           owner {
             id
@@ -260,6 +323,23 @@ export function useIncentivesData(poolAddress?: string) {
     `;
   }, []);
 
+  const fetchIncentiveData = useCallback(async (poolAddress?: string) => {
+    const url = poolAddress
+      ? `${process.env.REACT_APP_V3_STAKER_API_URL}/incentives/pool/${poolAddress?.toLowerCase()}`
+      : `${process.env.REACT_APP_V3_STAKER_API_URL}/incentives`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch incentive data: ${response.statusText}`);
+    }
+
+    return response.json();
+  }, []);
+
   const fetchData = useCallback(async () => {
     if (!accountAddress) {
       return;
@@ -269,7 +349,15 @@ export function useIncentivesData(poolAddress?: string) {
       setIsLoading(true);
       setError(null);
 
-      const [incentivesResponse, positionsResponse] = await Promise.all([
+      const [incentivesApiData, positionsResponse, incentivesPoolResponse] = await Promise.all([
+        fetchIncentiveData(poolAddress),
+        fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: getUserPositionsQuery(accountAddress),
+          }),
+        }),
         fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -278,29 +366,39 @@ export function useIncentivesData(poolAddress?: string) {
             variables: { userAddress: accountAddress },
           }),
         }),
-        fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: getUserPositionsQuery(accountAddress),
-          }),
-        }),
       ]);
 
-      const [incentivesData, positionsData] = await Promise.all([
-        incentivesResponse.json(),
-        positionsResponse.json(),
-      ]);
-
-      if (incentivesData.errors) {
-        throw new Error(incentivesData.errors[0].message);
-      }
-
+      const positionsData = await positionsResponse.json();
+      const incentivesPoolData = (await incentivesPoolResponse.json())?.data;
+      const ethPrice = incentivesPoolData.bundle?.ethPriceUSD;
+      setEthPriceUSD(
+        parseFloat(ethPrice || "0")
+      );
       if (positionsData.errors) {
         throw new Error(positionsData.errors[0].message);
       }
 
-      if (!incentivesData?.data?.incentives?.length) {
+      // Extract unique pool IDs from incentive data
+      // const poolIds = [...new Set(incentivesApiData.map((incentive: any) => incentive.pool.id as string))];
+
+      // Transform REST API data to match the expected GraphQL structure
+      const transformedIncentivesData = incentivesApiData.map((incentive: any) => {
+        const poolAddressToFind = poolAddress ? poolAddress?.toLowerCase() : incentive.poolAddress;
+        const pool = incentivesPoolData.pools.find((pool: any) => pool.id === poolAddressToFind);
+        return ({
+          id: incentive.incentiveId,
+          reward: incentive.totalRewardUnclaimed,
+          rewardToken: incentive.rewardToken,
+          pool: pool,
+          startTime: incentive.startTime,
+          endTime: incentive.endTime,
+          vestingPeriod: incentive.vestingPeriod,
+          refundee: incentive.refundee,
+          ended: Date.now() / 1000 > incentive.endTime,
+        })
+      });
+
+      if (!transformedIncentivesData?.length) {
         setActiveIncentives([]);
         setEndedIncentives([]);
         setIncentivesData([]);
@@ -312,7 +410,7 @@ export function useIncentivesData(poolAddress?: string) {
       }
 
       // Fetch stakers data for all incentives
-      const stakersPromises = incentivesData.data.incentives.map(
+      const stakersPromises = transformedIncentivesData.map(
         (incentive: IncentiveData) =>
           fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
             method: "POST",
@@ -320,11 +418,11 @@ export function useIncentivesData(poolAddress?: string) {
             body: JSON.stringify({
               query: getStakersQuery(incentive.id),
             }),
-          }).then((res) => res.json())
+          }).then((res: Response) => res.json())
       );
 
       const stakersResults = await Promise.all(stakersPromises);
-      const incentivesWithStakers = incentivesData.data.incentives.map(
+      const incentivesWithStakers = transformedIncentivesData.map(
         (incentive: IncentiveData, index: number) => ({
           ...incentive,
           numberOfStakers: stakersResults[index].data.incentivePositions.length,
@@ -332,21 +430,20 @@ export function useIncentivesData(poolAddress?: string) {
       );
 
       setIncentivesData(incentivesWithStakers);
-      setEthPriceUSD(
-        parseFloat(incentivesData.data.bundle?.ethPriceUSD || "0")
-      );
       const positions = positionsData.data?.positions || [];
       setUserPositionsInPools(positions);
       setIsLoading(false);
     } catch (error) {
+      console.log('error', error)
       setError(error);
       setIsLoading(false);
     }
   }, [
     accountAddress,
-    getIncentivesQuery,
+    poolAddress,
     getStakersQuery,
     getUserPositionsQuery,
+    fetchIncentiveData,
   ]);
 
   const processIncentive = useCallback(
@@ -538,8 +635,8 @@ export function useIncentivesData(poolAddress?: string) {
       const tokenRewardsPercentage =
         totalAPR > 0 ? (tokenRewardsAPR / totalAPR) * 100 : 0;
 
-      const token1Balance = balances[incentive.pool.token1.id.toLowerCase()]?.balance;
-      const token0Balance = balances[incentive.pool.token0.id.toLowerCase()]?.balance;
+      const token1Balance = balances[incentive.pool?.token1?.id.toLowerCase()]?.balance;
+      const token0Balance = balances[incentive.pool?.token0?.id.toLowerCase()]?.balance;
       const hasTokensToDeposit = Boolean(token1Balance && token1Balance > 0 && token0Balance && token0Balance > 0);
 
 
@@ -579,9 +676,9 @@ export function useIncentivesData(poolAddress?: string) {
           incentive.rewardToken.decimals
         ),
         rewardToken: {
-          id: incentive.rewardToken.id,
-          symbol: incentive.rewardToken.symbol,
-          decimals: incentive.rewardToken.decimals,
+          id: poolData?.token1.address,
+          symbol: poolData?.token1.symbol,
+          decimals: poolData?.token1.decimals,
           logoURI: rewardTokenInfo?.logoURI || "",
         },
         hasUserPositionInIncentive,
@@ -691,6 +788,41 @@ export function useIncentivesData(poolAddress?: string) {
     }
   }, [accountAddress, poolAddress, fetchData]);
 
+  const processPositionsWithIncentives = useCallback(async (positions: PositionDetails[]) => {
+    if (!positions || positions.length === 0) {
+      return [];
+    }
+
+    try {
+      const positionsWithIncentiveData = await Promise.all(
+        positions.map(async (position) => {
+          const poolAddress = computePoolAddress({
+            factoryAddress: "0x5EFAc029721023DD6859AFc8300d536a2d6d4c82",
+            tokenA: new Token(841, position.token0, 18),
+            tokenB: new Token(841, position.token1, 18),
+            fee: position.fee,
+            chainId: 841,
+          });
+
+          const incentiveData = await fetchIncentiveData(poolAddress);
+          if (incentiveData && incentiveData.length > 0) {
+            return incentiveData.map((incentive: any) => ({
+              ...position,
+              incentiveData: incentive
+            }));
+          }
+
+          return [];
+        })
+      );
+
+      return positionsWithIncentiveData.flat().filter((position): position is PositionDetails & { incentiveData: any } => position !== null && position !== undefined);
+    } catch (error) {
+      console.error('Error processing positions with incentives:', error);
+      return [];
+    }
+  }, [fetchIncentiveData]);
+
   return {
     activeIncentives,
     endedIncentives,
@@ -700,5 +832,6 @@ export function useIncentivesData(poolAddress?: string) {
     isLoading: isLoading || poolsLoading,
     error,
     refetch: fetchData,
+    processPositionsWithIncentives,
   };
 }

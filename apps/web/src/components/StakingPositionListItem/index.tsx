@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { useCurrency } from 'hooks/Tokens'
 import { getAddress } from 'viem'
@@ -9,9 +9,7 @@ import { ThemedText } from 'theme/components'
 import { DoubleCurrencyLogo } from 'components/DoubleLogo'
 import { useFormatter } from 'utils/formatNumbers'
 import { useBulkPosition } from 'hooks/useBulkPosition'
-import { PositionWithIncentive } from 'hooks/useIncentivesData'
-import { ethers } from 'ethers'
-import { BigNumber } from 'ethers'
+import { PositionDetails } from 'types/position'
 
 const LinkRow = styled(Link)`
   align-items: center;
@@ -49,23 +47,42 @@ const FeeTierText = styled(ThemedText.SubHeader)`
   color: ${({ theme }) => theme.neutral3};
 `
 
-export default function StakingPositionListItem({ position }: { position: PositionWithIncentive }) {
-  const positionSummaryLink = `/pool/${position.id}`
-  const currency0 = useCurrency(getAddress(position.pool.token0?.id ?? ''))
-  const currency1 = useCurrency(getAddress(position.pool.token1?.id ?? ''))
-  const { formatDelta, formatTickPrice } = useFormatter()
-  const [pendingReward, setPendingReward] = useState<BigNumber>(BigNumber.from(0))
-  const { getIncentivePendingRewards } = useBulkPosition(position.id, position.pool.id, [])
+export default function StakingPositionListItem({ position }: { position: PositionDetails & { incentiveData: any } }) {
+  const positionSummaryLink = `/pool/${position.tokenId.toString()}`
+  const currency0 = useCurrency(getAddress(position.token0 ?? ''))
+  const currency1 = useCurrency(getAddress(position.token1 ?? ''))
+  const { formatDelta } = useFormatter()
+  const [pendingReward, setPendingReward] = useState<number>(0)
+  const { getIncentivePendingRewards } = useBulkPosition(Number(position.tokenId.toString()))
 
   useEffect(() => {
     const fetchRewards = async () => {
-      const rewards = await getIncentivePendingRewards(position.incentive)
-      setPendingReward(rewards || BigNumber.from(0))
+      if (position.incentiveData) {
+        const rewards = await getIncentivePendingRewards({
+          id: position.incentiveData.incentiveId,
+          rewardToken: {
+            id: position.token1 ?? '',
+            symbol: currency1?.symbol ?? '',
+            decimals: currency1?.decimals ?? 0,
+            logoURI: ''
+          },
+          poolAddress: position.incentiveData.poolAddress,
+          startTime: position.incentiveData.startTime,
+          endTime: position.incentiveData.endTime,
+          vestingPeriod: position.incentiveData.vestingPeriod,
+          refundee: position.incentiveData.refundee
+        })
+        setPendingReward(Number(rewards || 0))
+      }
     }
     fetchRewards()
     const interval = setInterval(fetchRewards, 10000)
     return () => clearInterval(interval)
-  }, [getIncentivePendingRewards, position.incentive])
+  }, [getIncentivePendingRewards, position.incentiveData])
+
+  if (pendingReward <= 0) {
+    return <></>
+  }
 
   return (
     <LinkRow to={positionSummaryLink}>
@@ -73,13 +90,13 @@ export default function StakingPositionListItem({ position }: { position: Positi
         <PrimaryPositionIdData>
           <DoubleCurrencyLogo currencies={[currency0, currency1]} size={18} />
           <ThemedText.SubHeader>
-            {position.pool.token0?.symbol} / {position.pool.token1?.symbol}
+            {currency0?.symbol} / {currency1?.symbol}
           </ThemedText.SubHeader>
-          <FeeTierText> {formatDelta(parseFloat(new Percent(position.pool.feeTier, 1_000_000).toSignificant()))}</FeeTierText>
+          <FeeTierText> {formatDelta(parseFloat(new Percent(position.fee, 1_000_000).toSignificant()))}</FeeTierText>
         </PrimaryPositionIdData>
         <ThemedText.BodyPrimary>
-          <Trans i18nKey="common.pendingRewards" />: {Number(ethers.utils.formatEther(pendingReward)).toFixed(6)} &nbsp;
-          {position.incentive.rewardToken.symbol}
+          <Trans i18nKey="common.pendingRewards" />: {pendingReward.toFixed(6)} &nbsp;
+          {position.incentiveData?.rewardToken?.symbol || currency1?.symbol}
         </ThemedText.BodyPrimary>
       </RowBetween>
     </LinkRow>

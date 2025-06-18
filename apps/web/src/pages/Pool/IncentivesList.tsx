@@ -22,6 +22,7 @@ import styled from "styled-components";
 import { useBulkPosition } from "hooks/useBulkPosition";
 import Toggle from "components/Toggle";
 import { ethers } from "ethers";
+import { useAccount } from "hooks/useAccount";
 
 const Container = styled.div`
   height: 425px;
@@ -30,11 +31,31 @@ const Container = styled.div`
   flex-direction: column;
 `;
 
+const HeaderContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0 8px 0;
+  width: 100%;
+  margin-bottom: 10px;
+`;
+
+const IncentivesTitle = styled.h2`
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  color: ${({ theme }) => theme.neutral1};
+  
+  @media (max-width: ${({ theme }) => `${theme.breakpoint.sm}px`}) {
+    font-size: 20px;
+  }
+`;
+
 const ButtonsContainer = styled(Row)`
   position: sticky;
   top: 0;
   background: ${({ theme }) => theme.surface1};
-  padding: 16px 0;
+  padding: 8px 0 16px 0;
   gap: 8px;
   justify-content: center;
   z-index: 1;
@@ -43,7 +64,7 @@ const ButtonsContainer = styled(Row)`
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
-    padding: 8px 0;
+    padding: 4px 0 8px 0;
     & > button, & > label, & > div {
       width: 100% !important;
       min-width: 0;
@@ -75,12 +96,10 @@ const ToggleLabel = styled.button`
 const ToggleRow = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  gap: 12px;
+  
   @media (max-width: ${({ theme }) => `${theme.breakpoint.sm}px`}) {
-    gap: 2px;
+    gap: 8px;
     & > button, & > label, & > div {
       font-size: 12px;
     }
@@ -88,7 +107,7 @@ const ToggleRow = styled.div`
 `;
 
 const SmallToggle = styled(Toggle)`
-  transform: scale(0.8);
+  transform: scale(0.7);
   margin-left: 0;
   @media (max-width: ${({ theme }) => `${theme.breakpoint.sm}px`}) {
     transform: scale(0.6);
@@ -140,14 +159,9 @@ function IncentivesList({
   const [pendingRewardsMap, setPendingRewardsMap] = useState<
     Record<string, number>
   >({});
-  const [isTokenOwner, setIsTokenOwner] = useState(false);
-  const [isBulkStaking, setIsBulkStaking] = useState(false);
-  const [isBulkUnstaking, setIsBulkUnstaking] = useState(false);
-  const [isBulkWithdrawing, setIsBulkWithdrawing] = useState(false);
-  const [isStaking, setIsStaking] = useState(false);
-  const [isUnstaking, setIsUnstaking] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showEndedIncentives, setShowEndedIncentives] = useState(false);
+  const { address } = useAccount();
 
   const {
     activeIncentives,
@@ -159,145 +173,10 @@ function IncentivesList({
   const allIncentives = showEndedIncentives
     ? [...activeIncentives, ...endedIncentives]
     : activeIncentives;
-
   const {
-    isDeposited,
-    handleStake,
-    handleUnstake,
-    handleClaim,
-    handleBulkStake,
-    handleBulkUnstake,
-    handleBulkWithdraw,
     getIncentivePendingRewards,
-  } = useBulkPosition(tokenId, poolAddress, allIncentives);
-
-  const hasAvailableIncentives = useMemo(() => {
-    return activeIncentives.some(
-      (incentive) =>
-        incentive.positionOnPoolIds?.includes(tokenId) &&
-        !incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [activeIncentives]);
-
-  const hasStakedIncentives = useMemo(() => {
-    return allIncentives.some((incentive) =>
-      incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [allIncentives]);
-
-  const hasAllIncetivesStaked = useMemo(() => {
-    return allIncentives.every((incentive) =>
-      incentive.positionOnIncentiveIds?.includes(tokenId)
-    );
-  }, [allIncentives]);
-
-  const handleStakeWithRefresh = useCallback(
-    async (incentive: ProcessedIncentive) => {
-      try {
-        setIsStaking(true);
-        const tx = await handleStake(incentive);
-        if (tx) {
-          await tx.wait(2);
-          await refetchIncentives();
-        }
-      } catch (error) {
-        console.error("Error in stake with refresh:", error);
-      } finally {
-        setIsStaking(false);
-      }
-    },
-    [handleStake, refetchIncentives]
-  );
-
-  const handleUnstakeWithRefresh = useCallback(
-    async (incentive: ProcessedIncentive) => {
-      try {
-        setIsUnstaking(true);
-        const tx = await handleUnstake(incentive);
-        if (tx) {
-          await tx.wait(2);
-          await refetchIncentives();
-        }
-      } catch (error) {
-        console.error("Error in unstake with refresh:", error);
-      } finally {
-        setIsUnstaking(false);
-      }
-    },
-    [handleUnstake, refetchIncentives]
-  );
-
-  const handleClaimWithRefresh = useCallback(
-    async (incentive: ProcessedIncentive) => {
-      try {
-        setIsClaiming(true);
-        const tx = await handleClaim(incentive);
-        if (tx) {
-          await tx.wait(2);
-          await refetchIncentives();
-        }
-      } catch (error) {
-        console.error("Error in claim with refresh:", error);
-      } finally {
-        setIsClaiming(false);
-      }
-    },
-    [handleClaim, refetchIncentives]
-  );
-
-  const handleBulkStakeWithRefresh = useCallback(async () => {
-    try {
-      setIsBulkStaking(true);
-      const tx = await handleBulkStake();
-      if (tx) {
-        await tx.wait(2);
-        await refetchIncentives();
-      }
-    } catch (error) {
-      console.error("Error in bulk staking with refresh:", error);
-    } finally {
-      setIsBulkStaking(false);
-    }
-  }, [handleBulkStake, refetchIncentives]);
-
-  const handleBulkUnstakeWithRefresh = useCallback(async () => {
-    try {
-      setIsBulkUnstaking(true);
-      const tx = await handleBulkUnstake();
-      if (tx) {
-        await tx.wait(2);
-        await refetchIncentives();
-      }
-    } catch (error) {
-      console.error("Error in bulk unstaking with refresh:", error);
-    } finally {
-      setIsBulkUnstaking(false);
-    }
-  }, [handleBulkUnstake, refetchIncentives]);
-
-  const handleBulkWithdrawWithRefresh = useCallback(async () => {
-    try {
-      setIsBulkWithdrawing(true);
-      const tx = await handleBulkWithdraw();
-      if (tx) {
-        await tx.wait(2);
-        await refetchIncentives();
-      }
-    } catch (error) {
-      console.error("Error in bulk withdrawal with refresh:", error);
-    } finally {
-      setIsBulkWithdrawing(false);
-    }
-  }, [handleBulkWithdraw, refetchIncentives]);
-
-  const positions = useMemo(
-    () =>
-      allIncentives.map((incentive) => ({
-        tokenId: Number(incentive.id),
-        incentive: incentive,
-      })),
-    [allIncentives]
-  );
+    handleClaim,
+  } = useBulkPosition(tokenId);
 
   useEffect(() => {
     const fetchRewards = async () => {
@@ -305,19 +184,48 @@ function IncentivesList({
       for (const incentive of allIncentives) {
         try {
           const reward = await getIncentivePendingRewards(incentive);
-          rewards[incentive.id] = Number(ethers.utils.formatEther(reward || 0));
+          rewards[incentive.id] = Number(reward || 0);
         } catch (error) {
           console.error("Error fetching rewards:", error);
           rewards[incentive.id] = 0;
         }
       }
+
       setPendingRewardsMap(rewards);
     };
 
     fetchRewards();
-    const interval = setInterval(fetchRewards, 10000);
-    return () => clearInterval(interval);
   }, [allIncentives, getIncentivePendingRewards]);
+
+
+  const handleClaimWithRefresh = useCallback(
+    async (pendingRewards: string, incentive: ProcessedIncentive) => {
+      try {
+        setIsClaiming(true);
+
+        if (!address) {
+          throw new Error("No wallet connected");
+        }
+
+        const message = `Verify wallet ownership for claiming ${pendingRewards} rewards at ${new Date().toISOString()}`;
+        const hexMessage = `0x${Buffer.from(message, 'utf8').toString('hex')}`;
+
+        const signature = await (window.ethereum as any).request({
+          method: 'personal_sign',
+          params: [hexMessage, address],
+        });
+
+
+        await handleClaim(incentive);
+        await refetchIncentives();
+      } catch (error) {
+        console.error("Error in claim with refresh:", error);
+      } finally {
+        setIsClaiming(false);
+      }
+    },
+    [handleClaim, refetchIncentives, address]
+  );
 
   if (isLoading) {
     return (
@@ -343,65 +251,11 @@ function IncentivesList({
 
   return (
     <Container>
-      <Trans i18nKey="common.incentives" />
+      <HeaderContainer>
+        <IncentivesTitle>
+          <Trans i18nKey="common.incentives" />
+        </IncentivesTitle>
 
-      <ButtonsContainer>
-        <ButtonPrimary
-          onClick={handleBulkStakeWithRefresh}
-          disabled={
-            isBulkStaking ||
-            isStaking ||
-            !hasAvailableIncentives ||
-            hasAllIncetivesStaked
-          }
-          style={{
-            padding: "8px",
-            fontSize: "14px",
-            height: "32px",
-            whiteSpace: "nowrap",
-            width: "120px",
-          }}
-        >
-          {isBulkStaking || isStaking ? (
-            <Trans i18nKey="common.staking" />
-          ) : (
-            <Trans i18nKey="common.stakeAll" />
-          )}
-        </ButtonPrimary>
-        <ButtonPrimary
-          onClick={handleBulkUnstakeWithRefresh}
-          disabled={isBulkUnstaking || isUnstaking || !hasStakedIncentives}
-          style={{
-            padding: "8px",
-            fontSize: "14px",
-            height: "32px",
-            whiteSpace: "nowrap",
-            width: "120px",
-          }}
-        >
-          {isBulkUnstaking || isUnstaking ? (
-            <Trans i18nKey="common.unstaking" />
-          ) : (
-            <Trans i18nKey="common.unstakeAll" />
-          )}
-        </ButtonPrimary>
-        <ButtonPrimary
-          onClick={handleBulkWithdrawWithRefresh}
-          disabled={isBulkWithdrawing || !isDeposited || hasStakedIncentives}
-          style={{
-            padding: "8px",
-            fontSize: "14px",
-            height: "32px",
-            whiteSpace: "nowrap",
-            width: "120px",
-          }}
-        >
-          {isBulkWithdrawing ? (
-            <Trans i18nKey="common.withdrawing" />
-          ) : (
-            <Trans i18nKey="common.withdraw" />
-          )}
-        </ButtonPrimary>
         <ToggleRow>
           <ToggleLabel as="label">
             <ThemedText.BodySmall color="neutral2">
@@ -413,7 +267,7 @@ function IncentivesList({
             toggle={() => setShowEndedIncentives(!showEndedIncentives)}
           />
         </ToggleRow>
-      </ButtonsContainer>
+      </HeaderContainer>
 
       <ScrollableContent>
         {allIncentives.map((incentive) => {
@@ -422,9 +276,7 @@ function IncentivesList({
           const hasStaked = incentive.positionOnIncentiveIds?.includes(
             Number(tokenId)
           );
-          const canStake =
-            incentive.positionOnPoolIds?.includes(Number(tokenId)) &&
-            !hasStaked;
+
           const rewardToken = new Token(
             1,
             incentive.rewardToken.id,
@@ -487,84 +339,22 @@ function IncentivesList({
                         logoURI={logoURI}
                       />
                       <ThemedText.DeprecatedMain>
-                        {pendingRewards.toFixed(6) || "0"} &nbsp;
+                        {pendingRewards.toFixed(6)} &nbsp;
                         {rewardToken.symbol}
                       </ThemedText.DeprecatedMain>
                     </RowFixed>
                   </RowBetween>
-                  <RowBetween>
-                    <ThemedText.DeprecatedMain>
-                      <Trans i18nKey="common.accruedRewards" />
-                    </ThemedText.DeprecatedMain>
-                    <RowFixed>
-                      <StyledCurrencyLogo
-                        currency={rewardToken}
-                        size={20}
-                        style={{ marginRight: "8px" }}
-                        logoURI={logoURI}
-                      />
-                      <ThemedText.DeprecatedMain>
-                        {Number(incentive.currentReward?.reward || 0).toFixed(
-                          6
-                        ) || "0"}
-                        &nbsp;
-                        {rewardToken.symbol}
-                      </ThemedText.DeprecatedMain>
-                    </RowFixed>
-                  </RowBetween>
-                  <Row>
+
+                  <Row style={{ justifyContent: 'center' }}>
                     <ButtonPrimary
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleStakeWithRefresh(incentive);
+                        handleClaimWithRefresh(pendingRewards.toFixed(6), incentive);
                       }}
                       disabled={
-                        !isActive || !canStake || isStaking || isBulkStaking
-                      }
-                      style={{
-                        padding: "8px",
-                        fontSize: "14px",
-                        height: "32px",
-                        width: "120px",
-                        marginRight: "8px",
-                        marginLeft: "12px",
-                      }}
-                    >
-                      {isStaking || isBulkStaking ? (
-                        <Trans i18nKey="common.staking" />
-                      ) : (
-                        <Trans i18nKey="common.stake" />
-                      )}
-                    </ButtonPrimary>
-                    <ButtonPrimary
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        handleUnstakeWithRefresh(incentive);
-                      }}
-                      disabled={!hasStaked || isUnstaking || isBulkUnstaking}
-                      style={{
-                        padding: "8px",
-                        fontSize: "14px",
-                        height: "32px",
-                        width: "120px",
-                        marginRight: "8px",
-                      }}
-                    >
-                      {isUnstaking || isBulkUnstaking ? (
-                        <Trans i18nKey="common.unstaking" />
-                      ) : (
-                        <Trans i18nKey="common.unstake" />
-                      )}
-                    </ButtonPrimary>
-                    <ButtonPrimary
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClaimWithRefresh(incentive);
-                      }}
-                      disabled={
-                        Number(incentive.currentReward?.reward) <= 0 ||
+                        Number(pendingRewards) <= 0 ||
                         isClaiming ||
-                        isNaN(Number(incentive.currentReward?.reward))
+                        isNaN(Number(pendingRewards))
                       }
                       style={{
                         padding: "8px",
