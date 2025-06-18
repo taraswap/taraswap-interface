@@ -207,7 +207,6 @@ function IncentivesList({
           throw new Error("No wallet connected");
         }
 
-        // Request user to sign a verification message
         const message = `Verify wallet ownership for claiming ${pendingRewards} rewards at ${new Date().toISOString()}`;
         const hexMessage = `0x${Buffer.from(message, 'utf8').toString('hex')}`;
 
@@ -216,7 +215,6 @@ function IncentivesList({
           params: [hexMessage, address],
         });
 
-        console.log('Wallet verified with signature:', signature);
 
         await handleClaim(incentive);
         await refetchIncentives();
@@ -291,8 +289,6 @@ function IncentivesList({
           )}/logo.png`;
 
           const pendingRewards = pendingRewardsMap[incentive.id] || 0;
-          console.log('pendingRewardsMap', pendingRewardsMap)
-          console.log('pendingRewards', pendingRewards)
           return (
             <IncentiveCard
               key={incentive.id}

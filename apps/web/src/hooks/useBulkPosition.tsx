@@ -43,7 +43,6 @@ export const useBulkPosition = (
         console.log('response', response)
 
         const data = await response.json();
-        console.log('data', data)
         return ethers.utils.formatUnits(data.reward, incentive.rewardToken.decimals);
       } catch (error) {
         console.error("Error getting pending rewards:", error);

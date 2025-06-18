@@ -805,9 +805,8 @@ export function useIncentivesData(poolAddress?: string) {
           });
 
           const incentiveData = await fetchIncentiveData(poolAddress);
-          const activeIncentives = incentiveData?.filter((incentive: any) => incentive.endTime > Date.now() / 1000)
-          if (activeIncentives && activeIncentives.length > 0) {
-            return activeIncentives.map((incentive: any) => ({
+          if (incentiveData && incentiveData.length > 0) {
+            return incentiveData.map((incentive: any) => ({
               ...position,
               incentiveData: incentive
             }));

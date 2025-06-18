@@ -72,7 +72,6 @@ export default function StakingPositionListItem({ position }: { position: Positi
           vestingPeriod: position.incentiveData.vestingPeriod,
           refundee: position.incentiveData.refundee
         })
-        console.log('rewards', rewards)
         setPendingReward(Number(rewards || 0))
       }
     }
@@ -80,6 +79,10 @@ export default function StakingPositionListItem({ position }: { position: Positi
     const interval = setInterval(fetchRewards, 10000)
     return () => clearInterval(interval)
   }, [getIncentivePendingRewards, position.incentiveData])
+
+  if (pendingReward <= 0) {
+    return <></>
+  }
 
   return (
     <LinkRow to={positionSummaryLink}>

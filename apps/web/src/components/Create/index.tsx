@@ -406,7 +406,6 @@ export default function Create() {
           rewardToken: formData.rewardTokenAddress,
           refundeeAddress: formData.refundeeAddress,
         };
-        console.log('createIncentiveDto', createIncentiveDto)
 
         setIsCreating(true);
         const response = await fetch(`${process.env.REACT_APP_V3_STAKER_API_URL}/incentives`, {
