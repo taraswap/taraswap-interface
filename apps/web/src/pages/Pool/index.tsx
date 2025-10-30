@@ -17,7 +17,7 @@ import { useNetworkSupportsV2 } from "hooks/useNetworkSupportsV2";
 import { useV3Positions } from "hooks/useV3Positions";
 import { Trans } from "i18n";
 import { PoolVersionMenu } from "pages/Pool/shared";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -223,7 +223,72 @@ export default function Pool() {
     [position.id, position]
   )).values()];
 
-  const [openPositions, closedPositions] = positions?.reduce<
+  // Keep stable positions to prevent disappearing during refetches
+  const [stablePositions, setStablePositions] = useState<PositionDetails[]>([]);
+  const [stableStakingPositions, setStableStakingPositions] = useState<any[]>([]);
+  const [lastPositionsUpdate, setLastPositionsUpdate] = useState<number>(0);
+  const [lastStakingUpdate, setLastStakingUpdate] = useState<number>(0);
+
+  useEffect(() => {
+    if (positions && positions.length > 0) {
+      const now = Date.now();
+      
+      // Always update if we have no stable positions
+      if (stablePositions.length === 0) {
+        setStablePositions(positions);
+        setLastPositionsUpdate(now);
+        return;
+      }
+      
+      // Check if positions have changed significantly
+      const hasSignificantChanges = positions.length !== stablePositions.length ||
+        positions.some((pos, index) => {
+          const stablePos = stablePositions[index];
+          if (!stablePos) return true;
+          return pos.tokenId.toString() !== stablePos.tokenId.toString() ||
+                 pos.liquidity.toString() !== stablePos.liquidity.toString();
+        });
+      
+      // Update if there are significant changes or if it's been more than 30 seconds
+      if (hasSignificantChanges || (now - lastPositionsUpdate) > 30000) {
+        setStablePositions(positions);
+        setLastPositionsUpdate(now);
+      }
+    }
+  }, [positions, stablePositions, lastPositionsUpdate]);
+
+  useEffect(() => {
+    if (uniquePositions && uniquePositions.length > 0) {
+      const now = Date.now();
+      
+      // Always update if we have no stable positions
+      if (stableStakingPositions.length === 0) {
+        setStableStakingPositions(uniquePositions);
+        setLastStakingUpdate(now);
+        return;
+      }
+      
+      // Check if staking positions have changed significantly
+      const hasSignificantChanges = uniquePositions.length !== stableStakingPositions.length ||
+        uniquePositions.some((pos, index) => {
+          const stablePos = stableStakingPositions[index];
+          if (!stablePos) return true;
+          return pos.id !== stablePos.id;
+        });
+      
+      // Update if there are significant changes or if it's been more than 30 seconds
+      if (hasSignificantChanges || (now - lastStakingUpdate) > 30000) {
+        setStableStakingPositions(uniquePositions);
+        setLastStakingUpdate(now);
+      }
+    }
+  }, [uniquePositions, stableStakingPositions, lastStakingUpdate]);
+
+  // Use stable positions for processing to prevent disappearing
+  const currentPositions = stablePositions.length > 0 ? stablePositions : positions;
+  const currentStakingPositions = stableStakingPositions.length > 0 ? stableStakingPositions : uniquePositions;
+
+  const [openPositions, closedPositions] = currentPositions?.reduce<
     [PositionDetails[], PositionDetails[]]
   >(
     (acc, p) => {
@@ -389,9 +454,9 @@ export default function Pool() {
             <MainContentWrapper>
               {isStakingPositionsLoading ? (
                 <PositionsLoadingPlaceholder />
-              ) : uniquePositions.length > 0 ? (
+              ) : currentStakingPositions.length > 0 ? (
                 <PositionList
-                  positions={uniquePositions}
+                  positions={currentStakingPositions}
                   isStakingList={true}
                 />
               ) : (

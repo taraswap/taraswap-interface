@@ -66,6 +66,39 @@ export default function useMultiChainPositions(account: string, chains = DEFAULT
   const positions = cachedPositions?.result
   const positionsFetching = useRef(false)
   const positionsLoading = !cachedPositions?.result && positionsFetching.current
+  
+  // Keep stable positions to prevent disappearing during refetches
+  const [stablePositions, setStablePositions] = useState<PositionInfo[]>([])
+  const [lastUpdateTime, setLastUpdateTime] = useState<number>(0)
+  
+  // Update stable positions when we have new data, but only if it's significantly different
+  useEffect(() => {
+    if (positions && positions.length > 0) {
+      const now = Date.now()
+      
+      // Always update if we have no stable positions
+      if (stablePositions.length === 0) {
+        setStablePositions(positions)
+        setLastUpdateTime(now)
+        return
+      }
+      
+      // Check if positions have changed significantly
+      const hasSignificantChanges = positions.length !== stablePositions.length ||
+        positions.some((pos, index) => {
+          const stablePos = stablePositions[index]
+          if (!stablePos) return true
+          return pos.details.tokenId !== stablePos.details.tokenId ||
+                 pos.details.liquidity.toString() !== stablePos.details.liquidity.toString()
+        })
+      
+      // Update if there are significant changes or if it's been more than 30 seconds
+      if (hasSignificantChanges || (now - lastUpdateTime) > 30000) {
+        setStablePositions(positions)
+        setLastUpdateTime(now)
+      }
+    }
+  }, [positions, stablePositions, lastUpdateTime])
 
   const [feeMap, setFeeMap] = useState<{ [key: string]: FeeAmounts }>({})
 
@@ -185,21 +218,48 @@ export default function useMultiChainPositions(account: string, chains = DEFAULT
 
   const fetchAllPositions = useCallback(async () => {
     positionsFetching.current = true
-    const positions = (await Promise.all(chains.map(fetchPositionsForChain))).flat()
-    positionsFetching.current = false
-    setPositions(positions)
+    try {
+      const positions = (await Promise.all(chains.map(fetchPositionsForChain))).flat()
+      positionsFetching.current = false
+      setPositions(positions)
+    } catch (error) {
+      console.error('Failed to fetch positions:', error)
+      positionsFetching.current = false
+      // Don't clear existing positions on error - keep the last known good state
+    }
+  }, [chains, fetchPositionsForChain, setPositions])
+
+  // Background refetching - fetch in background without clearing existing data
+  const backgroundRefetch = useCallback(async () => {
+    if (positionsFetching.current) return
+    
+    try {
+      positionsFetching.current = true
+      const newPositions = (await Promise.all(chains.map(fetchPositionsForChain))).flat()
+      positionsFetching.current = false
+      
+      // Only update if we got new data
+      if (newPositions && newPositions.length > 0) {
+        setPositions(newPositions)
+      }
+    } catch (error) {
+      console.error('Background refetch failed:', error)
+      positionsFetching.current = false
+      // Don't clear existing positions on error
+    }
   }, [chains, fetchPositionsForChain, setPositions])
 
   // Fetches positions when existing positions are stale and the document has focus
   useEffect(() => {
-    if (positionsFetching.current || cachedPositions?.stale === false) {
+    if (cachedPositions?.stale === false) {
       return
     } else if (document.hasFocus()) {
-      fetchAllPositions()
+      // Use background refetch to avoid clearing existing data
+      backgroundRefetch()
     } else {
       // Avoids refetching positions until the user returns to Interface to avoid polling unnused rpc data
       const onFocus = () => {
-        fetchAllPositions()
+        backgroundRefetch()
         window.removeEventListener('focus', onFocus)
       }
       window.addEventListener('focus', onFocus)
@@ -208,7 +268,20 @@ export default function useMultiChainPositions(account: string, chains = DEFAULT
       }
     }
     return
-  }, [fetchAllPositions, positionsFetching, cachedPositions?.stale])
+  }, [backgroundRefetch, cachedPositions?.stale])
+
+  // Periodic background refresh every 30 seconds when document has focus
+  useEffect(() => {
+    if (!account) return
+    
+    const interval = setInterval(() => {
+      if (document.hasFocus()) {
+        backgroundRefetch()
+      }
+    }, 30000) // 30 seconds
+    
+    return () => clearInterval(interval)
+  }, [account, backgroundRefetch])
 
   const positionsWithFeesAndPrices: PositionInfo[] | undefined = useMemo(
     () =>
@@ -227,5 +300,8 @@ export default function useMultiChainPositions(account: string, chains = DEFAULT
     [feeMap, positions, priceMap]
   )
 
-  return { positions: positionsWithFeesAndPrices, loading: pricesLoading || positionsLoading }
+  // Use stable positions to prevent disappearing during refetches
+  const finalPositions = stablePositions.length > 0 ? stablePositions : positionsWithFeesAndPrices
+
+  return { positions: finalPositions, loading: pricesLoading || positionsLoading }
 }

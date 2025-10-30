@@ -270,7 +270,7 @@ export function useIncentivesData(poolAddress?: string) {
       setError(null);
 
       const [incentivesResponse, positionsResponse] = await Promise.all([
-        fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
+        fetch(String(process.env.REACT_APP_INDEXER_SUBGRAPH_TARASWAP), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -278,7 +278,7 @@ export function useIncentivesData(poolAddress?: string) {
             variables: { userAddress: accountAddress },
           }),
         }),
-        fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
+        fetch(String(process.env.REACT_APP_INDEXER_SUBGRAPH_TARASWAP), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -314,7 +314,7 @@ export function useIncentivesData(poolAddress?: string) {
       // Fetch stakers data for all incentives
       const stakersPromises = incentivesData.data.incentives.map(
         (incentive: IncentiveData) =>
-          fetch("https://indexer.lswap.app/subgraphs/name/taraxa/uniswap-v3/", {
+          fetch(String(process.env.REACT_APP_INDEXER_SUBGRAPH_TARASWAP), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
